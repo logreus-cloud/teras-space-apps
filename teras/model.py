@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
 from sklearn.model_selection import KFold, StratifiedKFold, cross_val_score
+from threadpoolctl import threadpool_limits
 
 FLEX_CSV = Path(__file__).resolve().parents[1] / "data/raw/PSI-69_Experimental table_FLEX.csv"
 FEATURES = ("heptane", "pressure_mmhg", "o2", "n2", "co2", "he", "d0_mm")
@@ -66,6 +67,11 @@ PRESETS = {
 
 
 def train(df, random_state=0) -> FlexModels:
+    with threadpool_limits(limits=1):
+        return _train(df, random_state)
+
+
+def _train(df, random_state) -> FlexModels:
     x = df.loc[:, list(FEATURES)]
     y = df[OUTCOME]
     folds = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)

@@ -1,5 +1,10 @@
-import streamlit as st
-from dotenv import load_dotenv
+import os
+
+# Shared cloud hosts report many CPUs; unbounded OpenMP threads make training crawl.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
+import streamlit as st  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
 from teras.data import DATA_PATH, full_text, load_investigations
 from teras.llm import is_configured, model_name, provider
