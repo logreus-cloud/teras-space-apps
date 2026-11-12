@@ -45,7 +45,7 @@ def test_model_names(monkeypatch):
     assert llm.model_name() == "claude-opus-5-5"
     monkeypatch.setenv("LLM_PROVIDER", "gemini")
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
-    assert llm.model_name() == "gemini-2.5-flash"
+    assert llm.model_name() == "gemini-3.5-flash"
 
 
 def test_claude_text_and_request(monkeypatch):

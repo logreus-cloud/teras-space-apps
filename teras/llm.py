@@ -44,7 +44,7 @@ def model_name() -> str:
     if active == "claude":
         return os.getenv("CLAUDE_MODEL", "").strip() or "claude-opus-5-5"
     if active == "gemini":
-        return os.getenv("GEMINI_MODEL", "").strip() or "gemini-2.5-flash"
+        return os.getenv("GEMINI_MODEL", "").strip() or "gemini-3.5-flash"
     raise LLMNotConfigured("Add ANTHROPIC_API_KEY or GEMINI_API_KEY to .env to enable SI features.")
 
 
