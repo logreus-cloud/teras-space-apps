@@ -1,5 +1,6 @@
 import json
 import os
+import time
 
 import anthropic
 from dotenv import load_dotenv
@@ -81,26 +82,58 @@ def _generate_claude(client, prompt, system, json_mode):
     return "".join(block.text for block in response.content if block.type == "text")
 
 
+def _generate_gemini(client, prompt, system, json_mode):
+    fallbacks = os.getenv(
+        "GEMINI_FALLBACK_MODELS", "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
+    )
+    models = [model_name()]
+    for name in fallbacks.split(","):
+        name = name.strip()
+        if name and name not in models:
+            models.append(name)
+    config = types.GenerateContentConfig(
+        system_instruction=system,
+        temperature=0.2,
+        response_mime_type="application/json" if json_mode else None,
+    )
+    for model in models:
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model, contents=prompt, config=config
+                )
+                return response.text or ""
+            except Exception as exc:
+                codes = (getattr(exc, "code", None), getattr(exc, "status_code", None))
+                if 404 in codes:
+                    break
+                message = str(exc)
+                definite = any(code in (400, 401, 403) for code in codes)
+                temporary = not definite and (
+                    any(code in (429, 500, 503, 504) for code in codes)
+                    or any(
+                        marker in message.upper()
+                        for marker in ("UNAVAILABLE", "RESOURCE_EXHAUSTED", "503")
+                    )
+                )
+                if temporary:
+                    if attempt == 0:
+                        time.sleep(1.5)
+                    continue
+                key = os.getenv("GEMINI_API_KEY", "").strip()
+                message = message.replace(key, "[redacted]") if key else message
+                raise RuntimeError(f"Gemini request failed: {message}") from None
+    raise RuntimeError(
+        "Gemini is overloaded right now (all models busy). Try again in a minute."
+    )
+
+
 def generate(prompt: str, system: str, json_mode: bool = False) -> str:
     active = provider()
     client = get_client()
     if active == "claude":
         return _generate_claude(client, prompt, system, json_mode)
-    try:
-        response = client.models.generate_content(
-            model=model_name(),
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system,
-                temperature=0.2,
-                response_mime_type="application/json" if json_mode else None,
-            ),
-        )
-        return response.text or ""
-    except Exception as exc:
-        key = os.getenv("GEMINI_API_KEY", "")
-        message = str(exc).replace(key, "[redacted]") if key else str(exc)
-        raise RuntimeError(f"Gemini request failed: {message}") from None
+    return _generate_gemini(client, prompt, system, json_mode)
 
 
 def generate_json(prompt, system) -> dict | list:

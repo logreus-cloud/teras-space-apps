@@ -9,7 +9,7 @@ from teras import llm
 def empty_env(monkeypatch):
     for name in (
         "LLM_PROVIDER", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
-        "CLAUDE_MODEL", "GEMINI_MODEL", "CLAUDE_EFFORT",
+        "CLAUDE_MODEL", "GEMINI_MODEL", "GEMINI_FALLBACK_MODELS", "CLAUDE_EFFORT",
     ):
         monkeypatch.setenv(name, "")
 
@@ -101,3 +101,54 @@ def test_load_dotenv_does_not_override_env(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
     assert llm.provider() == "gemini"
     assert overrides == [False, False]
+
+
+class GeminiError(Exception):
+    def __init__(self, code):
+        super().__init__(f"HTTP {code}")
+        self.code = code
+
+
+def _gemini_scenario(monkeypatch, outcomes):
+    calls = []
+
+    def generate_content(**kwargs):
+        calls.append(kwargs["model"])
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return SimpleNamespace(text=outcome)
+
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate_content))
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
+    monkeypatch.setenv("GEMINI_MODEL", "main")
+    monkeypatch.setenv("GEMINI_FALLBACK_MODELS", "backup")
+    monkeypatch.setattr(llm.genai, "Client", lambda api_key: client)
+    monkeypatch.setattr(llm.time, "sleep", lambda seconds: None)
+    return calls
+
+
+def test_gemini_retries_then_uses_fallback(monkeypatch):
+    calls = _gemini_scenario(monkeypatch, [GeminiError(503), GeminiError(503), "OK"])
+    assert llm.generate("prompt", "system") == "OK"
+    assert calls == ["main", "main", "backup"]
+
+
+def test_gemini_all_models_overloaded(monkeypatch):
+    calls = _gemini_scenario(monkeypatch, [GeminiError(503) for _ in range(4)])
+    with pytest.raises(RuntimeError, match="Gemini is overloaded"):
+        llm.generate("prompt", "system")
+    assert calls == ["main", "main", "backup", "backup"]
+
+
+def test_gemini_skips_missing_model(monkeypatch):
+    calls = _gemini_scenario(monkeypatch, [GeminiError(404), "OK"])
+    assert llm.generate("prompt", "system") == "OK"
+    assert calls == ["main", "backup"]
+
+
+def test_gemini_stops_on_bad_request(monkeypatch):
+    calls = _gemini_scenario(monkeypatch, [GeminiError(400)])
+    with pytest.raises(RuntimeError, match="Gemini request failed: HTTP 400"):
+        llm.generate("prompt", "system")
+    assert calls == ["main"]

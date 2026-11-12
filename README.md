@@ -23,7 +23,7 @@ pytest
 
 On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`.
 
-Add `ANTHROPIC_API_KEY` for Claude or `GEMINI_API_KEY` for Gemini to `.env` to enable SI features. Set `LLM_PROVIDER=claude` or `LLM_PROVIDER=gemini` to choose explicitly; with both keys present, Claude is selected by default. Explore and data comparison work without a key.
+Add `ANTHROPIC_API_KEY` for Claude or `GEMINI_API_KEY` for Gemini to `.env` to enable SI features. Set `LLM_PROVIDER=claude` or `LLM_PROVIDER=gemini` to choose explicitly; with both keys present, Claude is selected by default. Set `GEMINI_FALLBACK_MODELS` to a comma-separated list of models to try when Gemini is overloaded. Explore and data comparison work without a key.
 
 ## Own ML model (Predict tab)
 
@@ -53,11 +53,11 @@ Development AI assistants used by the team: _team to complete before submission_
 
 ## Team
 
-Teras has three members:
+Team **Teras** — NASA Space Apps Challenge 2026, Almaty local event.
 
-- Member 1 — _name and role_.
-- Member 2 — _name and role_.
-- Member 3 — _name and role_.
+- Ilyas Usserov (@ligreus) — team owner
+- Darvin Tamerlan Ruslanuly (@felorez)
+- Andrey Kiryukhin
 
 ## License
 
