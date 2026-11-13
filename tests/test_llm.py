@@ -10,6 +10,8 @@ def empty_env(monkeypatch):
     for name in (
         "LLM_PROVIDER", "ANTHROPIC_API_KEY", "GEMINI_API_KEY",
         "CLAUDE_MODEL", "GEMINI_MODEL", "GEMINI_FALLBACK_MODELS", "CLAUDE_EFFORT",
+        "OLLAMA_BASE_URL", "OLLAMA_MODEL", "OLLAMA_API_KEY",
+        "LLM_CLOUD_FALLBACK", "OLLAMA_NUM_CTX",
     ):
         monkeypatch.setenv(name, "")
 
@@ -152,3 +154,89 @@ def test_gemini_stops_on_bad_request(monkeypatch):
     with pytest.raises(RuntimeError, match="Gemini request failed: HTTP 400"):
         llm.generate("prompt", "system")
     assert calls == ["main"]
+
+
+def test_ollama_provider_and_model(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    assert llm.provider() == "ollama"
+    assert llm.is_configured()
+    assert llm.model_name() == "qwen3:8b"
+    monkeypatch.setenv("OLLAMA_MODEL", "custom:14b")
+    assert llm.model_name() == "custom:14b"
+
+
+@pytest.mark.parametrize(("token", "json_mode"), [("", False), ("tunnel-token", True)])
+def test_ollama_request(monkeypatch, token, json_mode):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("OLLAMA_API_KEY", token)
+    calls = []
+
+    def post(url, *, json, headers, timeout):
+        calls.append((url, json, headers, timeout))
+        return SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"message": {"content": "<think>work\nmore</think> result "}},
+        )
+
+    monkeypatch.setattr(llm.requests, "post", post)
+    assert llm.generate("prompt", "system", json_mode=json_mode) == "result"
+    assert llm.last_model_used() == "qwen3:8b"
+    url, payload, headers, timeout = calls[0]
+    assert url == "http://localhost:11434/api/chat"
+    assert payload["model"] == "qwen3:8b"
+    assert payload["messages"] == [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "prompt"},
+    ]
+    assert payload["stream"] is False
+    assert payload["options"] == {"temperature": 0.2, "num_ctx": 8192}
+    assert payload["think"] is False
+    assert payload.get("format") == ("json" if json_mode else None)
+    assert headers == ({"Authorization": f"Bearer {token}"} if token else {})
+    assert timeout == (5, 180)
+
+
+def test_ollama_falls_back_to_gemini(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
+    monkeypatch.setenv("GEMINI_MODEL", "cloud-model")
+
+    def fail(*args, **kwargs):
+        raise llm.requests.ConnectionError("offline")
+
+    monkeypatch.setattr(llm.requests, "post", fail)
+    monkeypatch.setattr(llm.genai, "Client", lambda api_key: object())
+    calls = []
+
+    def generate_gemini(client, prompt, system, json_mode):
+        calls.append((prompt, system, json_mode))
+        return "cloud"
+
+    monkeypatch.setattr(llm, "_generate_gemini", generate_gemini)
+    assert llm.generate("prompt", "system", json_mode=True) == "cloud"
+    assert calls == [("prompt", "system", True)]
+    assert llm.last_model_used() == "cloud-model"
+
+
+@pytest.mark.parametrize(("fallback", "gemini_key"), [("0", "gemini-key"), ("1", "")])
+def test_ollama_unreachable_without_fallback(monkeypatch, fallback, gemini_key):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("LLM_CLOUD_FALLBACK", fallback)
+    monkeypatch.setenv("GEMINI_API_KEY", gemini_key)
+    monkeypatch.setenv("OLLAMA_API_KEY", "secret-token")
+
+    def fail(*args, **kwargs):
+        raise llm.requests.ConnectionError("secret-token")
+
+    monkeypatch.setattr(llm.requests, "post", fail)
+    with pytest.raises(RuntimeError, match="unreachable") as error:
+        llm.generate("prompt", "system")
+    assert "secret-token" not in str(error.value)
+    assert llm.last_model_used() is None
+
+
+def test_ollama_rejects_non_http_url(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "file:///tmp/ollama")
+    with pytest.raises(llm.LLMNotConfigured):
+        llm.generate("prompt", "system")

@@ -37,7 +37,10 @@ with st.sidebar:
     st.header("Teras")
     st.write("Explore microgravity combustion evidence for safer crewed missions.")
     if ready:
-        st.success(f"SI provider: {provider().title()} ({model_name()})")
+        if provider() == "ollama":
+            st.success(f"SI provider: Local GPU model via Ollama ({model_name()})")
+        else:
+            st.success(f"SI provider: {provider().title()} ({model_name()})")
     else:
         st.warning("Add ANTHROPIC_API_KEY or GEMINI_API_KEY to .env")
     project_types = st.multiselect(
