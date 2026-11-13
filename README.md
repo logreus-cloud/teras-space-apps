@@ -29,8 +29,39 @@ Add `ANTHROPIC_API_KEY` for Claude or `GEMINI_API_KEY` for Gemini to `.env` to e
 
 1. Install Ollama and run `ollama pull qwen3:8b` for 8 GB VRAM. With more memory, you can use a larger model.
 2. For local use, set `LLM_PROVIDER=ollama` in `.env`.
-3. For the hosted site, expose Ollama through a tunnel that checks a bearer token. Never publish port 11434 openly. Set `LLM_PROVIDER`, `OLLAMA_BASE_URL`, `OLLAMA_API_KEY`, and a Claude or Gemini API key in Streamlit Secrets.
-4. When the PC is off, the site automatically falls back to Claude or Gemini.
+3. When the PC is off, the site automatically falls back to Claude or Gemini.
+
+### Expose to the hosted site
+
+On the Windows PC that runs Ollama:
+
+1. Start Ollama and download the model:
+
+   ```powershell
+   ollama pull qwen3:8b
+   ```
+
+2. In PowerShell, set a long token and start the gateway:
+
+   ```powershell
+   $env:TERAS_GATEWAY_TOKEN = "<long token>"
+   python scripts/ollama_gateway.py
+   ```
+
+   If `TERAS_GATEWAY_TOKEN` is unset, the gateway generates a token and prints the value to use for `OLLAMA_API_KEY` in Streamlit Secrets.
+
+3. In a second PowerShell window, install cloudflared once and start the tunnel:
+
+   ```powershell
+   winget install Cloudflare.cloudflared
+   cloudflared tunnel --url http://localhost:8787
+   ```
+
+   Copy the `https://….trycloudflare.com` address. Never publish Ollama's port 11434 directly.
+
+4. In Streamlit Secrets, set `LLM_PROVIDER = "ollama"`, `OLLAMA_BASE_URL = "<tunnel address>"`, `OLLAMA_API_KEY = "<token>"`, and an `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` for cloud fallback. The quick tunnel address changes every time cloudflared restarts, so update `OLLAMA_BASE_URL` in Secrets after each restart.
+
+5. Check the connection with `curl -H "Authorization: Bearer <token>" <tunnel address>/api/tags`.
 
 ## Own ML model (Predict tab)
 
