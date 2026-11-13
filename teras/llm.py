@@ -190,7 +190,8 @@ def _generate_ollama(prompt, system, json_mode):
     if payload["model"].startswith(("qwen3", "deepseek-r1")):
         payload["think"] = False
     if json_mode:
-        payload["format"] = "json"
+        # A dict is a JSON schema; plain "json" only allows a top-level object.
+        payload["format"] = json_mode if isinstance(json_mode, dict) else "json"
     key = os.getenv("OLLAMA_API_KEY", "").strip()
     headers = {"Authorization": f"Bearer {key}"} if key else {}
     try:
@@ -233,7 +234,7 @@ def _generate_cloud(active, prompt, system, json_mode) -> str:
     return result
 
 
-def generate(prompt: str, system: str, json_mode: bool = False) -> str:
+def generate(prompt: str, system: str, json_mode: bool | dict = False) -> str:
     global _last_model_used
     _last_model_used = None
     active = provider()
@@ -255,8 +256,8 @@ def generate(prompt: str, system: str, json_mode: bool = False) -> str:
     raise error
 
 
-def generate_json(prompt, system) -> dict | list:
-    response = generate(prompt, system, json_mode=True)
+def generate_json(prompt, system, schema: dict | None = None) -> dict | list:
+    response = generate(prompt, system, json_mode=schema or True)
     source = (provider() or "LLM").title()
     try:
         value = json.loads(response)

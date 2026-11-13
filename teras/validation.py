@@ -2,8 +2,33 @@ FUEL_PHASES = {"solid", "liquid", "gas", "mixed", "unknown"}
 GRAVITY_LEVELS = {"microgravity", "partial", "normal", "mixed", "unknown"}
 FIRE_AREAS = {"prevention", "detection", "suppression"}
 
+RANK_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "accession": {"type": "string"},
+            "score": {"type": "integer"},
+            "reason": {"type": "string"},
+        },
+        "required": ["accession", "score", "reason"],
+    },
+}
+
+
+def _unwrap_rank_list(value):
+    # Ollama's JSON mode only allows a top-level object, so local models wrap
+    # the requested array ({"items": [...]}) or return a single bare item.
+    if not isinstance(value, dict):
+        return value
+    if "accession" in value:
+        return [value]
+    lists = [item for item in value.values() if isinstance(item, list)]
+    return lists[0] if len(lists) == 1 else value
+
 
 def normalize_rank(value, known_accessions) -> list[dict]:
+    value = _unwrap_rank_list(value)
     if not isinstance(value, list):
         raise ValueError("Rank response must be a JSON array.")
     known = set(known_accessions)

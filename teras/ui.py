@@ -5,14 +5,14 @@ from . import cache
 from .data import to_dataframe
 from .llm import generate, generate_json
 from .prompts import SYSTEM_EXPERT, attributes_prompt, compare_prompt, qa_prompt, rank_prompt, summary_prompt
-from .validation import normalize_attributes, normalize_rank
+from .validation import RANK_SCHEMA, normalize_attributes, normalize_rank
 
 
 def _display(value):
     return ", ".join(value) if isinstance(value, tuple) else str(value) if value is not None else ""
 
 
-def _call(kind, prompt, ready, json_mode=False, validator=None):
+def _call(kind, prompt, ready, json_mode=False, validator=None, schema=None):
     if not ready:
         st.info("Add ANTHROPIC_API_KEY or GEMINI_API_KEY to .env to enable SI features.")
         return None
@@ -23,7 +23,7 @@ def _call(kind, prompt, ready, json_mode=False, validator=None):
         except ValueError:
             pass
     try:
-        value = generate_json(prompt, SYSTEM_EXPERT) if json_mode else generate(prompt, SYSTEM_EXPERT)
+        value = generate_json(prompt, SYSTEM_EXPERT, schema) if json_mode else generate(prompt, SYSTEM_EXPERT)
         if validator:
             value = validator(value)
         cache.put(kind, prompt, value)
@@ -96,6 +96,7 @@ def render_rank(items, ready):
             result = _call(
                 "rank", rank_prompt(scenario, items), ready,
                 json_mode=True, validator=lambda value: normalize_rank(value, lookup),
+                schema=RANK_SCHEMA,
             )
             if result is not None:
                 st.session_state.rank_results = {"scenario": scenario, "results": result}

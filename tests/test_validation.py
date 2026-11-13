@@ -16,7 +16,24 @@ def test_normalize_rank_filters_and_clamps():
     ]
 
 
-@pytest.mark.parametrize("value", [None, {}, [], [{"accession": "PSI-999"}]])
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"items": [{"accession": "PSI-69", "score": 80, "reason": "r"}]},
+        {"rankings": [{"accession": "PSI-69", "score": 80, "reason": "r"}], "note": "x"},
+        {"accession": "PSI-69", "score": 80, "reason": "r"},
+    ],
+)
+def test_normalize_rank_unwraps_object_responses(value):
+    assert normalize_rank(value, {"PSI-69"}) == [
+        {"accession": "PSI-69", "score": 80, "reason": "r"}
+    ]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [None, {}, [], [{"accession": "PSI-999"}], {"a": [], "b": []}],
+)
 def test_normalize_rank_rejects_empty_results(value):
     with pytest.raises(ValueError):
         normalize_rank(value, {"PSI-69"})
