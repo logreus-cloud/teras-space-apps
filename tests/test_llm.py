@@ -196,6 +196,23 @@ def test_ollama_request(monkeypatch, token, json_mode):
     assert timeout == (5, 180)
 
 
+def test_ollama_json_schema_is_sent_as_format(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    calls = []
+
+    def post(url, *, json, headers, timeout):
+        calls.append(json)
+        return SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"message": {"content": '[{"accession": "PSI-69"}]'}},
+        )
+
+    monkeypatch.setattr(llm.requests, "post", post)
+    schema = {"type": "array", "items": {"type": "object"}}
+    assert llm.generate_json("prompt", "system", schema) == [{"accession": "PSI-69"}]
+    assert calls[0]["format"] == schema
+
+
 def test_ollama_falls_back_to_gemini(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "ollama")
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-key")
